@@ -6,44 +6,44 @@
 ;; Project: FENZ Tender 5 Decision Support Tool
 ;; ============================================================
 
-;; 介面變數說明 ( Interface Sliders & Choosers ):
-;; 1. 植物性狀與地景 (6個): flammability, plant-moisture, fuel-load, density, vegetation-structure, landscape-type
-;; 2. 地形影響 (2個): slope-degree, slope-direction
-;; 3. 氣候條件 (4個): wind-speed, wind-direction, air-temperature, relative-humidity
-;; 4. 施救條件/水 (2個): water-source-type, distance-to-water
+;; Interface Variables (Sliders and Choosers):
+;; 1. Vegetation Traits and Landscape (6): flammability, plant-moisture, fuel-load, density, vegetation-structure, landscape-type
+;; 2. Topographic Factors (2): slope-degree, slope-direction
+;; 3. Weather Conditions (4): wind-speed, wind-direction, air-temperature, relative-humidity
+;; 4. Firefighting Resources and Water (2): water-source-type, distance-to-water
 
 globals [
   vegetation-burned
   fire-duration
 ]
 
-;; 1. 定義直升機品種 (Breed)
+;; 1. Define Helicopter Breed
 breed [ helicopters helicopter ]
 
-;; 2. 直升機專屬屬性 (Turtles-own)
+;; 2. Helicopter-Specific Variables
 helicopters-own [
-  target-fire      ;; 正在前往救援的火場 patch
-  target-water     ;; 正在前往取水的水源 patch
-  state            ;; 當前狀態 ("flying-to-water", "refilling", "flying-to-fire", "dropping-water")
-  cooldown-timer   ;; 裝水/灑水停留時間倒數
+  target-fire      ;; The fire patch currently being targeted
+  target-water     ;; The water-source patch currently being targeted
+  state            ;; Current state: "flying-to-water", "refilling", "flying-to-fire", or "dropping-water"
+  cooldown-timer   ;; Countdown timer for refilling and water-dropping operations
 ]
 
 patches-own [
-  is-water?       ;; 是否為水域
-  fuel            ;; 當前燃料量
-  initial-fuel    ;; 初始燃料量
-  is-burning?     ;; 是否正在燃燒
-  is-burned?      ;; 是否已燒毀
+  is-water?       ;; Indicates whether the patch is water
+  fuel            ;; Current fuel amount
+  initial-fuel    ;; Initial fuel amount
+  is-burning?     ;; Indicates whether the patch is currently burning
+  is-burned?      ;; Indicates whether the patch has already burned
 ]
 
 ;; ------------------------------------------------------------
-;; 1. SETUP (初始化地景與起火點)
+;; 1. SETUP (Initialize the Landscape and Ignition Point)
 ;; ------------------------------------------------------------
 to setup
   clear-all
   setup-landscape
   
-  ;; --- 重現真實起火點 ---
+  ;; --- Recreate the Actual Ignition Location ---
   let start-x (round (max-pxcor * 0.4))
   let start-y (max-pycor - distance-to-water - 2)
   
@@ -54,7 +54,7 @@ to setup
     ]
   ]
   
- set vegetation-burned 0
+  set vegetation-burned 0
   set fire-duration 0
   
   setup-helicopters
@@ -73,7 +73,7 @@ to setup-landscape
     ;; Set fixed water geometry
     ;; Water size is independent of distance-to-water
 
-    ;; 1. Coastal ocean: fixed-width band at the northern edge
+    ;; 1. Coastal ocean: fixed-width band along the northern edge
     if water-source-type = "ocean-coastal" [
       if pycor >= (max-pycor - water-width + 1) [
         set is-water? true
@@ -94,7 +94,7 @@ to setup-landscape
       ]
     ]
 
-    ;; Set appearance and fuel
+    ;; Set patch appearance and fuel
     ;; Water patches contain no fuel
     ifelse is-water? [
       set pcolor blue
@@ -118,15 +118,15 @@ end
 to setup-helicopters
   ask helicopters [ die ] 
   
-  ;; 只有在介面開啟 enable-helicopters? 或 num-helicopters > 0 時建立
+  ;; Create helicopters when enable-helicopters? is enabled or num-helicopters is greater than zero
   if any? patches with [ is-water? ] [
     create-helicopters num-helicopters [
-      set shape "airplane"       ;; NetLogo 內建圖案（也可改為 "airplane" 或自訂直升機圖示）
+      set shape "airplane"       ;; Built-in NetLogo shape; can be replaced with a custom helicopter icon
       set color cyan
       set size 2.5
       set state "flying-to-water"
       
-      ;; 預設降落在離中心最近的水源
+      ;; Start at the water source closest to the centre
       let home-water min-one-of (patches with [ is-water? ]) [ distance patch 0 0 ]
       if home-water != nobody [ move-to home-water ]
       set target-water home-water
@@ -137,83 +137,83 @@ end
 
 to update-helicopters
   ask helicopters [
-    ;; 根據當前狀態 (state) 執行對應動作
+    ;; Execute the action corresponding to the current state
     
     ;; -----------------------------------------------------------------
-    ;; 狀態 1: 飛往最近的水源 (Flying to Water)
+    ;; State 1: Flying to Water
     ;; -----------------------------------------------------------------
     if state = "flying-to-water" [
-      ;; 若沒有目標水源或目標不是水，重新尋找最近的水源網格
+      ;; If the target is missing or is no longer a water patch, find the nearest water patch
       if target-water = nobody or not [ is-water? ] of target-water [
         set target-water min-one-of (patches with [ is-water? ]) [ distance myself ]
       ]
       
       ifelse target-water != nobody [
         face target-water
-        fd 1.5 ;; 直升機飛行速度 (可調整)
+        fd 1.5 ;; Helicopter flight speed (adjustable)
         
-        ;; 抵達水源處，開始取水
+        ;; Start refilling upon reaching the water source
         if distance target-water < 1 [
           set state "refilling"
-          set cooldown-timer 3 ;; 停留 3 個 ticks 裝水 (象徵裝水時間)
+          set cooldown-timer 3 ;; Spend 3 ticks refilling
         ]
       ] [
-        ;; 若地圖上無水，直升機停飛
+        ;; Stop the helicopter if no water is available on the map
         stop
       ]
     ]
     
     ;; -----------------------------------------------------------------
-    ;; 狀態 2: 水源處裝水 (Refilling Water)
+    ;; State 2: Refilling Water
     ;; -----------------------------------------------------------------
     if state = "refilling" [
       set cooldown-timer cooldown-timer - 1
       if cooldown-timer <= 0 [
-        ;; 裝水完成，尋找最近正在燃燒的火場
+        ;; After refilling, find the nearest actively burning patch
         let nearest-fire min-one-of (patches with [ is-burning? ]) [ distance myself ]
         ifelse nearest-fire != nobody [
           set target-fire nearest-fire
           set state "flying-to-fire"
-          set color red ;; 裝滿水後變紅/黃色提示
+          set color red ;; Change colour to red or yellow to indicate a full water load
         ] [
-          ;; 無火可滅，繼續在水邊待命
+          ;; If no fire is burning, remain on standby near the water source
           set state "flying-to-water"
         ]
       ]
     ]
     
     ;; -----------------------------------------------------------------
-    ;; 狀態 3: 飛往目標火場 (Flying to Fire)
+    ;; State 3: Flying to the Target Fire
     ;; -----------------------------------------------------------------
     if state = "flying-to-fire" [
-      ;; 如果原本瞄準的火場已經熄滅，立即重新尋找最近的新火場
+      ;; If the target fire has been extinguished, find the nearest new fire
       if target-fire = nobody or not [ is-burning? ] of target-fire [
         set target-fire min-one-of (patches with [ is-burning? ]) [ distance myself ]
       ]
       
       ifelse target-fire != nobody [
         face target-fire
-        fd 1.5 ;; 飛行速度
+        fd 1.5 ;; Flight speed
         
-        ;; 抵達火場上方，開始灑水
+        ;; Begin dropping water upon reaching the target fire
         if distance target-fire < 1 [
           set state "dropping-water"
-          set cooldown-timer 1 ;; 灑水費時 1 tick
+          set cooldown-timer 1 ;; Spend 1 tick dropping water
         ]
       ] [
-        ;; 沒火了，返航回水源
+        ;; If no fire remains, return to the water source
         set state "flying-to-water"
         set color cyan
       ]
     ]
     
     ;; -----------------------------------------------------------------
-    ;; 狀態 4: 灑水滅火 (Dropping Water)
+    ;; State 4: Dropping Water
     ;; -----------------------------------------------------------------
     if state = "dropping-water" [
       set cooldown-timer cooldown-timer - 1
       if cooldown-timer <= 0 [
-        ;; 執行滅火：將該網格設為熄滅/灰燼
+        ;; Extinguish the target patch and mark it as burned
         if target-fire != nobody and [ is-burning? ] of target-fire [
           ask target-fire [
             set is-burning? false
@@ -221,7 +221,7 @@ to update-helicopters
             set pcolor grey
           ]
         ]
-        ;; 水已用完，返回水源裝水
+        ;; Return to the water source to refill
         set target-water min-one-of (patches with [ is-water? ]) [ distance myself ]
         set state "flying-to-water"
         set color cyan
@@ -231,10 +231,10 @@ to update-helicopters
 end
 
 ;; ------------------------------------------------------------
-;; 2. GO (火勢蔓延與燃燒主程序)
+;; 2. GO (Main Fire Spread and Burning Procedure)
 ;; ------------------------------------------------------------
 to go
-   if not any? patches with [ is-burning? ] [
+  if not any? patches with [ is-burning? ] [
     set fire-duration ticks
     stop
   ]
@@ -242,7 +242,7 @@ to go
   spread-fire
   burn-down
 
-  ;; Calculate percentage of vegetation burned
+  ;; Calculate the percentage of vegetation burned
   let total-vegetation count patches with [ initial-fuel > 0 ]
   let burned-vegetation count patches with [
     initial-fuel > 0 and is-burned?
@@ -255,7 +255,7 @@ to go
     set vegetation-burned 0
   ]
 
-    ;; 呼叫直升機動態施救模組
+  ;; Run the dynamic helicopter firefighting module
   update-helicopters
   
   tick
@@ -265,7 +265,7 @@ end
 to spread-fire
   ask patches with [ is-burning? ] [
 
-    ;; 記住火源位置
+    ;; Record the source fire location
     let source-x pxcor
     let source-y pycor
 
@@ -276,11 +276,11 @@ to spread-fire
       fuel > 0
     ] [
 
-     ;; 計算「火源 → 鄰居」的方向
+      ;; Calculate the direction from the fire source to the neighbouring patch
       let heading-to-neighbor
         (towardsxy source-x source-y + 180) mod 360
 
-      ;; 計算與風向的角度差
+      ;; Calculate the angular difference between the spread direction and wind direction
       let angle-diff abs (heading-to-neighbor - wind-direction)
 
       if angle-diff > 180 [
@@ -293,14 +293,14 @@ to spread-fire
         set wind-dir-factor 0.05
       ]
 
-      ;; 氣候條件
+      ;; Weather conditions
       let temp-factor (air-temperature / 35)
       let humidity-factor (1 - relative-humidity / 100)
 
       let wind-factor
         (1 + (wind-speed * 0.3 * wind-dir-factor))
 
-      ;; 植物性狀與地景
+      ;; Vegetation traits and landscape
       let plant-factor (1 - plant-moisture / 100)
       let flam-factor flammability
 
@@ -322,7 +322,7 @@ to spread-fire
         set type-weight 0.9
       ]
 
-      ;; 植被結構
+      ;; Vegetation structure
       let struct-weight 1.0
 
       if vegetation-structure = "surface-scrub-only" [
@@ -337,11 +337,11 @@ to spread-fire
         set struct-weight 1.6
       ]
 
-      ;; 地形
+      ;; Topographic conditions
       let slope-factor
         (1 + (slope-degree / 45) * 0.5)
 
-      ;; 綜合蔓延機率
+      ;; Calculate the combined fire-spread probability
       let ignition-probability
         (flam-factor *
          plant-factor *
@@ -352,7 +352,7 @@ to spread-fire
          type-weight *
          struct-weight)
 
-      ;; 點燃
+      ;; Ignite the neighbouring patch
       if random-float 1.0 < ignition-probability [
         set is-burning? true
         set pcolor red
@@ -367,7 +367,7 @@ to burn-down
     if fuel <= 0 [
       set is-burning? false
       set is-burned? true
-      set pcolor grey + 1  ;; 燃料耗盡變為灰燼
+      set pcolor grey + 1  ;; Turn the patch grey when its fuel is depleted
     ]
   ]
 end]]></code>
